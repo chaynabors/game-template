@@ -21,7 +21,7 @@ jobs:
 
       - name: Create release
         shell: bash
-        run: gh release create ${{ github.ref_name }} -d
+        run: gh release create v${{ github.ref_name }} -d
 
       - name: Set version
         shell: bash
@@ -69,13 +69,13 @@ jobs:
 
       - name: Compile
         shell: bash
-        run: cargo build --target ${{ matrix.target }} --release --no-default-features
+        run: cargo build --target ${{ matrix.target }} --release
 
       - name: Upload
         shell: bash
         run: |
           mv target/${{ matrix.target }}/release/${{ env.GAME_NAME }}${{ matrix.target_bin_suffix }} ${{ env.GAME_NAME }}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.target_bin_suffix }}
-          gh release upload ${{ github.ref_name }} ${{ env.GAME_NAME }}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.target_bin_suffix }}
+          gh release upload v${{ github.ref_name }} ${{ env.GAME_NAME }}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.target_bin_suffix }}
 
   publish-release:
     name: Publish release
@@ -88,4 +88,4 @@ jobs:
 
       - name: Publish release
         shell: bash
-        run: gh release edit ${{ github.ref_name }} --draft=false
+        run: gh release edit v${{ github.ref_name }} --draft=false
