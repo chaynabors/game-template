@@ -1,0 +1,95 @@
+name: Release
+
+on: 
+  push:
+    tags: "[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+  GAME_NAME: "game-template"
+  MSRV: "1.71" # minimum supported rust version
+  CACHE_SUFFIX: c # cache busting
+
+jobs:
+  create-release:
+    name: Create release
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Create release
+        shell: bash
+        run: gh release create v${{ github.ref_name }} -d
+
+  build-and-upload:
+    name: Build ${{ matrix.name }}
+    needs: create-release
+    permissions: write-all
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows
+          - name: Windows x86_64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            target_bin_suffix: ".exe"
+          # macOS Intel
+          - name: macOS x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+          # macOS Apple Silicon
+          - name: macOS arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set version
+        shell: bash
+        run: sed -i '0,/dependencies/ s/version = ".*"/version = "${{ github.ref_name }}"/' Cargo.toml
+
+      - name: Install toolchain
+        run: |
+          rustup toolchain install ${{ env.MSRV }} --no-self-update --profile=minimal --target ${{ matrix.target }}
+          rustup override set ${{ env.MSRV }}
+          cargo -V
+
+      - name: Compile
+        shell: bash
+        run: cargo build --target ${{ matrix.target }} --release
+
+      - name: Upload
+        shell: bash
+        run: |
+          mv target/${{ matrix.target }}/release/${{ env.GAME_NAME }}${{ matrix.target_bin_suffix }} ${{ env.GAME_NAME }}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.target_bin_suffix }}
+          gh release upload ${{ github.ref_name }} ${{ env.GAME_NAME }}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.target_bin_suffix }}
+
+  publish-release:
+    name: Publish release
+    needs: build-and-upload
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Publish release
+        shell: bash
+        run: gh release edit ${{ github.ref_name }} --draft=false
+
+      - name: Set version
+        shell: bash
+        run: sed -i '0,/dependencies/ s/version = ".*"/version = "${{ github.ref_name }}"/' Cargo.toml
+        
+      - name: Commit changes
+        shell: bash
+        run: |
+          git config --global user.name 'Chay Nabors'
+          git config --global user.email 'chaynabors@users.noreply.github.com'
+          git commit -am "bump version"
+          git push
