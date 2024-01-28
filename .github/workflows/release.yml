@@ -58,14 +58,14 @@ jobs:
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
       - name: Install toolchain
         run: |
           rustup toolchain install ${{ env.MSRV }} --no-self-update --profile=minimal --target ${{ matrix.target }}
           rustup override set ${{ env.MSRV }}
           cargo -V
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
       - name: Compile
         shell: bash
