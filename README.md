@@ -1,7 +1,7 @@
 ## Game template
-New game template with simple architecture and utilities
+[![Release](https://github.com/chaynabors/game-template/actions/workflows/release.yml/badge.svg)](https://github.com/chaynabors/game-template/actions/workflows/release.yml)
 
-Meant for personal use
+New game template with simple architecture and utilities
 
 ### Release
 `git tag {major}.{minor}.{patch}`
