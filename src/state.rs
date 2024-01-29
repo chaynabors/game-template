@@ -16,6 +16,5 @@ enum StateType {
 pub struct State(HashMap<Cow<'static, str>, StateType>);
 
 impl Asset for State {
-    #[cfg(debug_assertions)]
     const BACKEND: crate::asset::Backend = crate::asset::Backend::Yaml;
 }
