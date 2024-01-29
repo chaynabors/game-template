@@ -7,7 +7,7 @@ on:
 env:
   GITHUB_TOKEN: ${{ github.token }}
   GAME_NAME: "game-template"
-  MSRV: "1.71" # minimum supported rust version
+  MSRV: "1.72" # minimum supported rust version
   CACHE_SUFFIX: c # cache busting
 
 jobs:
