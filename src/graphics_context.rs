@@ -1,32 +1,28 @@
+use std::sync::Arc;
+
 use anyhow::bail;
-use wgpu::{Backends, CommandBuffer, CommandEncoder, CommandEncoderDescriptor, DeviceDescriptor, DownlevelFlags, Gles3MinorVersion, InstanceDescriptor, InstanceFlags, ShaderModel};
 
 use wgpu::{
-    Adapter, CompositeAlphaMode, Device, DownlevelCapabilities, Features, Instance, Limits,
-    PresentMode, Queue, Surface, SurfaceConfiguration, SurfaceTexture, TextureFormat,
-    TextureUsages, TextureView, TextureViewDescriptor,
+    Adapter, Backends, CommandBuffer, CompositeAlphaMode, Device, DeviceDescriptor, DownlevelCapabilities, DownlevelFlags, Extent3d, Features, Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags, Limits, PresentMode, Queue, ShaderModel, Surface, SurfaceConfiguration, SurfaceTexture, Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor
 };
+use winit::{dpi::PhysicalSize, window::Window};
 
 pub struct GraphicsContext<'a> {
     _instance: Instance,
     surface: Surface<'a>,
     _adapter: Adapter,
-    surface_config: SurfaceConfiguration,
-    device: Device,
+    pub surface_config: SurfaceConfiguration,
+    pub device: Device,
     queue: Queue,
+    depth_texture: Texture,
+    pub depth_texture_view: TextureView,
 }
 
 impl<'a> GraphicsContext<'a> {
-    pub fn new<W>(window: W, window_width: u32, window_height: u32) -> anyhow::Result<Self>
-    where
-        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle + Send + Sync + 'a,
-    {
+    pub fn new(window: Arc<Window>, physical_size: PhysicalSize<u32>) -> anyhow::Result<Self> {
         let dx12_shader_compiler = wgpu::util::dx12_shader_compiler_from_env().unwrap_or_default();
 
-        let instance_flags = match cfg!(debug_assertions) {
-            true => InstanceFlags::DEBUG | InstanceFlags::VALIDATION,
-            false => InstanceFlags::DISCARD_HAL_LABELS,
-        };
+        let instance_flags = InstanceFlags::from_build_config();
 
         let instance = Instance::new(InstanceDescriptor {
             backends: Backends::PRIMARY,
@@ -56,19 +52,18 @@ impl<'a> GraphicsContext<'a> {
         let surface_config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_DST,
             format: surface_format,
-            width: window_width,
-            height: window_height,
+            width: physical_size.width,
+            height: physical_size.height,
             present_mode: PresentMode::AutoVsync,
             alpha_mode: CompositeAlphaMode::Auto,
             view_formats: vec![],
-            desired_maximum_frame_latency: 2,
+            desired_maximum_frame_latency: 5,
         };
 
         let required_features = Features::PUSH_CONSTANTS
             | Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
             | Features::CLEAR_TEXTURE
-            | Features::CONSERVATIVE_RASTERIZATION
-            | Features::POLYGON_MODE_LINE;
+            | Features::CONSERVATIVE_RASTERIZATION;
 
         let adapter_features = adapter.features();
 
@@ -112,6 +107,8 @@ impl<'a> GraphicsContext<'a> {
 
         surface.configure(&device, &surface_config);
 
+        let (depth_texture, depth_texture_view) = create_depth_texture(&device, physical_size);
+
         Ok(Self {
             _instance: instance,
             surface,
@@ -119,15 +116,18 @@ impl<'a> GraphicsContext<'a> {
             surface_config,
             device,
             queue,
+            depth_texture: depth_texture,
+            depth_texture_view,
         })
     }
 
-    pub fn resize(&mut self, new_width: u32, new_height: u32) {
-        self.surface_config.width = new_width;
-        self.surface_config.height = new_height;
+    pub fn resize(&mut self, physical_size: PhysicalSize<u32>) {
+        self.surface_config.width = physical_size.width;
+        self.surface_config.height = physical_size.height;
 
         if self.surface_config.width * self.surface_config.height != 0 {
             self.surface.configure(&self.device, &self.surface_config);
+            (self.depth_texture, self.depth_texture_view) = create_depth_texture(&self.device, physical_size);
         }
     }
 
@@ -158,19 +158,19 @@ impl<'a> GraphicsContext<'a> {
         Some((frame, frame_view))
     }
 
-    pub fn aspect_ratio(&self) -> f32 {
-        self.surface_config.width as f32 / self.surface_config.height as f32
-    }
-
-    pub fn create_command_encoder(&self, label: &'static str) -> CommandEncoder {
-        self
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some(label),
-            })
-    }
-
     pub fn submit<I: IntoIterator<Item = CommandBuffer>>(&self, command_buffers: I) {
         self.queue.submit(command_buffers);
     }
+}
+
+fn create_depth_texture(device: &Device, physical_size: PhysicalSize<u32>) -> (Texture, TextureView) {
+    let texture = device.create_texture(&TextureDescriptor { label: Some("depth"), size: Extent3d {
+        width: physical_size.width,
+        height: physical_size.height,
+        depth_or_array_layers: 1,
+    }, mip_level_count: 1, sample_count: 1, dimension: TextureDimension::D2, format: TextureFormat::Depth32Float, usage: TextureUsages::RENDER_ATTACHMENT, view_formats: &[TextureFormat::Depth32Float]});
+
+    let view = texture.create_view(&TextureViewDescriptor::default());
+
+    (texture, view)
 }

@@ -1,9 +1,11 @@
 #![windows_subsystem = "windows"]
 
+mod assets;
+mod camera;
 mod engine;
-mod asset;
-mod graphics_context;
-mod state;
+mod graphics;
+
+use std::net::SocketAddr;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -17,25 +19,28 @@ struct Cli {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
-    Launch,
+    Launch { address: Option<SocketAddr> },
     Update,
+}
+
+impl Default for Command {
+    fn default() -> Self {
+        Self::Launch { address: None }
+    }
 }
 
 fn main() -> Result<()> {
     #[cfg(windows)]
     unsafe {
-        use windows::Win32::System::Console::{
-            AttachConsole,
-            ATTACH_PARENT_PROCESS
-        };
+        use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
 
         AttachConsole(ATTACH_PARENT_PROCESS).ok();
     }
 
     tracing_subscriber::fmt::init();
 
-    match Cli::parse().command.unwrap_or(Command::Launch) {
-        Command::Launch => engine::Engine::new()?.run()?,
+    match Cli::parse().command.unwrap_or_default() {
+        Command::Launch { address } => engine::Engine::new(address)?.run()?,
         Command::Update => {
             let status = self_update::backends::github::Update::configure()
                 .repo_owner("chaynabors")
